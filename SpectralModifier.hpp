@@ -22,6 +22,7 @@ public:
                 int verbose);
                 
     inline SpectralModifier ();
+    inline void remap();
     inline MultiFab apply_func (double (*amp_func)(double));
     inline void apply_array ();
     inline void FillInputWithRandomNoise(std::mt19937 gen);

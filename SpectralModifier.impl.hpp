@@ -33,9 +33,39 @@ inline SpectralModifier::SpectralModifier (MultiFab& input, Geometry& geom, int 
        amrex::Print() << numb_boxes << std::endl;
        amrex::Error("numb_boxes not right");}
 
-    Vector<int> rank_mapping = input.DistributionMap().ProcessorMap(); // copy the ranks' ordering
+    rank_mapping.resize(numb_boxes); 
+    remap();
+
+    // amrex::Print() << "dx?"<< h << std::endl;
 
     }
+
+inline void SpectralModifier::remap()
+{
+    //Building the FFT's new C-ordered rank mapping.
+    // AMREX has Fortran/ column-major ordering (first index, ie x, changing fastest in memory: arr[i_x][i_y][i_z] --> arr[i_x+ n_x*i_y+n_x*n_y*i_z])
+    // while dfft has C/row-major ordering (last index, ie x, changing fastest in memory: arr[i_x][i_y][i_z] --> arr[i_z+ n_z*i_y+n_z*n_y*i_x])   
+
+    for (int ib = 0; ib < numb_boxes; ++ib) // For each subbox
+    {
+        // The smallEnd method provides the indices of the lower corner of the Box in each dimension.
+        int i = (*ba)[ib].smallEnd(0) / n_box_dim[0]; 
+        int j = (*ba)[ib].smallEnd(1) / n_box_dim[1];
+        int k = (*ba)[ib].smallEnd(2) / n_box_dim[2];
+
+        // This would be the "correct" local index if the data wasn't being transformed
+        // int local_index = k*nbx*nby + j*nbx + i;
+        int local_index = k*numb_boxes_dim[0]*numb_boxes_dim[1] + j*numb_boxes_dim[1] + i;
+        // This is what we pass to dfft to compensate for the Fortran ordering
+        //      of amrex data in MultiFabs.
+        // int local_index = i*numb_boxes_dim[1]*numb_boxes_dim[2] + j*numb_boxes_dim[2] + k;
+
+        rank_mapping[local_index] = dmap[ib]; // copy each rank in the F-ordered Distribution Mapping to its C-order version.
+        if (verbose)
+          amrex::Print() << "LOADING RANK NUMBER " << dmap[ib] << " FOR GRID NUMBER " << ib
+                         << " WHICH IS LOCAL NUMBER " << local_index << std::endl;
+    }
+}
 
 inline MultiFab SpectralModifier::apply_func(double (*amp_func)(double))
     {
